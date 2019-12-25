@@ -24,66 +24,36 @@ namespace Engine
         }
         class Demo : FormGameEngine
         {
-            float xoff;
-            float yoff;
-            float zoff;
-            Vector[] grid;
-            int cellsize;
-            int w;
-            int h;
-            float noisegap;
+            Bitmap spriteship;
             Vector pos;
             Vector vel;
-            float size;
-            float speed;
+            float maxspeed;
+            float maxsteer;
             public Demo()
             {
                 AppName = "MyDemo";
             }
             public override void OnUserCreate()
             {
-                pos = new Vector(100, 100);
+                spriteship = new Bitmap("../../spaceship.png");
+                pos = new Vector(ScreenWidth() * 0.5f, ScreenHeight() * 0.5f);
                 vel = new Vector();
-                size = 20;
-                speed = 300;
-
-                Noise.Seed(rnd.Next(int.MaxValue));
-                noisegap = 0.1f;
-                cellsize = 20;
-                w = ScreenWidth() / cellsize;
-                h = ScreenHeight() / cellsize;
-                grid = new Vector[w * h];
-                for (int i = 0; i < grid.Length; i++) grid[i] = Vector.VectorFromAngle(0f);
+                maxspeed = 200f;
+                maxsteer = 0.01f;
             }
             public override void OnUserUpdate(float fElapsedTime)
             {
                 gCanvas.Clear(Color.Black);
-                yoff = 0f;
-                for (int y = 0; y < h; y++)
-                {
-                    xoff = 0f;
-                    for (int x = 0; x < w; x++)
-                    {
-                        int index = x + y * w;
-                        Vector v1 = new Vector(x * cellsize + cellsize * 0.5f, y * cellsize + cellsize * 0.5f);
-                        grid[index] = Vector.VectorFromAngle((float)(Noise.Eval(xoff, yoff, zoff) * Math.PI * 2f));
-                        Vector v2 = v1 + grid[index] * cellsize * 0.5f;
-                        gCanvas.DrawLine(Pens.White, v1.AsPoint(), v2.AsPoint());
-                        //int g = (int)Utility.Map(Noise.Eval(xoff, yoff, zoff), 0f, 1f, 0, 255);
-                        //SolidBrush sb = new SolidBrush(Color.FromArgb(g, g, g));
-                        //gCanvas.FillRectangle(sb, x * cellsize, y * cellsize, cellsize, cellsize);
-                        //sb.Dispose();
-                        xoff += noisegap;
-                    }
-                    yoff += noisegap;
-                }
-                zoff += fElapsedTime;
-                int place = (int)(pos.x / cellsize) + (int)(pos.y / cellsize) * w;
-                vel = grid[place].Clone();
-                Debug.WriteLine(place);
+                Vector desire = (Input.MousePos() - pos).Normalize();
+                Vector steering = desire - vel;
+                vel += steering.Limit(maxsteer);
+                float distance = (Input.MousePos() - pos).Magnitude();
+                float speed = Utility.Map(distance, 1, 100, 0, maxspeed);
                 pos += vel * speed * fElapsedTime;
-                pos.KeepInBounds(0, 0, ScreenWidth() - 1, ScreenHeight() - 1, true);
-                gCanvas.FillEllipse(Brushes.Red, pos.x - size * 0.5f, pos.y - size * 0.5f, size, size);
+                float angle = vel.AngleFromVector();
+                Bitmap pspriteship = Utility.RotateImage(spriteship, Utility.Degrees(angle));
+                gCanvas.DrawImage(pspriteship, pos.x - pspriteship.Width * 0.5f, pos.y - pspriteship.Height * 0.5f);
+                pspriteship.Dispose();
             }
         }
     }

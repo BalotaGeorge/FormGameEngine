@@ -9,21 +9,20 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
-
 class FormGameEngine
 {
     public static Random rnd = new Random();
-    public Bitmap IconImage;
-    Timer timer;
-    Bitmap bCanvas;
-    public Graphics gCanvas;
-    PictureBox Canvas;
-    Form form;
-    int nScreenWidth;
-    int nScreenHeight;
     public string AppName;
-    float fpsTime;
-    int fps;
+    public Bitmap IconImage;
+    public Graphics gCanvas;
+    private Bitmap bCanvas;
+    private Timer timer;
+    private PictureBox Canvas;
+    private Form form;
+    private int nScreenWidth;
+    private int nScreenHeight;
+    private float fpsTime;
+    private int fps;
     public void Construct(Form thisform, int ScreenWidth, int ScreenHeight)
     {
         if (ScreenWidth < 100 || ScreenHeight < 10)
@@ -64,7 +63,6 @@ class FormGameEngine
     {
         Time.Reset();
         fpsTime += Time.fElapsedTime;
-        if (fps == 0) fps = (int)(1f / Time.fElapsedTime);
         if (fpsTime >= 0.5f)
         {
             fpsTime = 0f;
@@ -289,6 +287,12 @@ class Vector
         y = p.Y;
         z = 0f;
     }
+    public static Vector RandomVector()
+    {
+        Vector v = new Vector((float)FormGameEngine.rnd.NextDouble(), 
+                              (float)FormGameEngine.rnd.NextDouble());
+        return v;
+    }
     public Vector Clone()
     {
         return new Vector(x, y, z);
@@ -508,12 +512,60 @@ class Matrix
         mat.matrix[2, 2] = (float)(Math.Cos(ax) * Math.Cos(ay));
         return mat;
     }
+    public static Matrix RotationGivenAxis(Vector u, float a)
+    {
+        u.Normalize();
+        Matrix mat = new Matrix(3, 3);
+        mat.matrix[0, 0] = (float)(Math.Cos(a) + u.x * u.x * (1 - Math.Cos(a)));
+        mat.matrix[0, 1] = (float)(u.x * u.y * (1 - Math.Cos(a)) - u.z * Math.Sin(a));
+        mat.matrix[0, 2] = (float)(u.x * u.z * (1 - Math.Cos(a)) + u.y * Math.Sin(a));
+        mat.matrix[1, 0] = (float)(u.y * u.x * (1 - Math.Cos(a)) + u.z * Math.Sin(a));
+        mat.matrix[1, 1] = (float)(Math.Cos(a) + u.y * u.y * (1 - Math.Cos(a)));
+        mat.matrix[1, 2] = (float)(u.y * u.z * (1 - Math.Cos(a)) - u.x * Math.Sin(a));
+        mat.matrix[2, 0] = (float)(u.z * u.x * (1 - Math.Cos(a)) - u.y * Math.Sin(a));
+        mat.matrix[2, 1] = (float)(u.z * u.y * (1 - Math.Cos(a)) + u.x * Math.Sin(a));
+        mat.matrix[2, 2] = (float)(Math.Cos(a) + u.z * u.z * (1 - Math.Cos(a)));
+        return mat;
+    }
+    public static Matrix RandomMatrix(int rows, int cols, int minval = 0, int maxval = 9)
+    {
+        Matrix mat = new Matrix(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                mat.matrix[i, j] = FormGameEngine.rnd.Next(minval, maxval + 1);
+        return mat;
+    }
     public Matrix Clone()
     {
         Matrix mat = new Matrix(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
                 mat.matrix[i, j] = matrix[i, j];
+        return mat;
+    }
+    public Matrix Transpuse()
+    {
+        Matrix mat = new Matrix(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                mat.matrix[j, i] = matrix[i, j];
+        return mat;
+    }
+    public Matrix RemoveLines(int row, int col)
+    {
+        Matrix mat = new Matrix(row >= 0 && row < rows ? rows - 1 : rows, 
+                                col >= 0 && col < cols ? cols - 1 : cols);
+        for (int i = 0, j = 0; i < rows; i++)
+        {
+            if (i == row) continue;
+            for (int k = 0, u = 0; k < cols; k++)
+            {
+                if (k == col) continue;
+                mat.matrix[j, u] = matrix[i, k];
+                u++;
+            }
+            j++;
+        }
         return mat;
     }
     public Matrix Multiply(Matrix m)
@@ -539,6 +591,51 @@ class Matrix
         Matrix m = new Matrix(new float[,] { { v.x }, { v.y }, { v.z } });
         Matrix mm = Multiply(m);
         return new Vector(mm.matrix[0, 0], mm.matrix[1, 0], mm.matrix[2, 0]);
+    }
+    public float Determinant()
+    {
+        if (cols == rows)
+        {
+            int n = rows;
+            if (n == 1) 
+                return matrix[0, 0];
+            if (n == 2)
+                return matrix[0, 0] * matrix[1, 1] - matrix[1, 0] * matrix[0, 1];
+            if (n == 3) 
+            {
+                return matrix[0, 0] * matrix[1, 1] * matrix[2, 2] +
+                       matrix[1, 0] * matrix[2, 1] * matrix[0, 2] +
+                       matrix[0, 1] * matrix[1, 2] * matrix[2, 0] -
+                       matrix[2, 0] * matrix[1, 1] * matrix[0, 2] -
+                       matrix[1, 0] * matrix[0, 1] * matrix[2, 2] -
+                       matrix[2, 1] * matrix[1, 2] * matrix[0, 0];
+            }
+            else
+            {
+                float sum = 0;
+                for (int i = 0; i < n; i++)
+                    sum += (i % 2 == 0 ? matrix[0, i] : -matrix[0, i]) * RemoveLines(0, i).Determinant();
+                return sum;
+            }
+        }
+        else throw new Exception("Matrix needs to be square");
+    }
+    public Matrix Inverse()
+    {
+        float det = Determinant();
+        if (det != 0f)
+        {
+            Matrix tr = Transpuse();
+            Matrix mat = new Matrix(rows, cols);
+            for (int i = 0; i < rows; i++)
+                for (int j = 0; j < cols; j++)
+                {
+                    float val = (i + j) % 2 == 0 ? 1 : -1;
+                    mat.matrix[i, j] = val * tr.RemoveLines(i, j).Determinant();
+                }
+            return mat / det;
+        }
+        else throw new Exception("Matrix is not inverible");
     }
     public override string ToString()
     {
@@ -612,10 +709,10 @@ class Matrix
 }
 static class FileRead
 {
-    static List<char> ListDividers = new List<char>() { ' ', ',', '!', '?' };
-    static List<string> FileUnchanged = new List<string>();
-    static string FileChanged = "";
-    static int CurrentIndex = 0;
+    private static List<char> ListDividers = new List<char>() { ' ', ',', '!', '?' };
+    private static List<string> FileUnchanged = new List<string>();
+    private static string FileChanged = "";
+    private static int CurrentIndex = 0;
     public static void ProcessFile(string FilePath)
     {
         FileUnchanged.Clear();
@@ -634,7 +731,7 @@ static class FileRead
         }
         FileChanged = sb.ToString();
     }
-    static bool IsDivider(char Value)
+    private static bool IsDivider(char Value)
     {
         foreach (char c in ListDividers)
             if (c == Value) return true;
@@ -695,6 +792,99 @@ static class FileRead
             ret = sb.ToString();
         }
         return ret;
+    }
+}
+class Animation
+{
+    private Bitmap[] ImageFrames;
+    private int nFramesCount;
+    private int nCurrentFrame;
+    private float[] fTimeBetweenFrames;
+    private bool bAnimating;
+    private Stopwatch timer;
+    public Animation(Bitmap SpriteSheet, int FramesCount)
+    {
+        nFramesCount = FramesCount;
+        fTimeBetweenFrames = new float[FramesCount];
+        ImageFrames = new Bitmap[FramesCount];
+        for (int i = 0; i < FramesCount; i++)
+        {
+            fTimeBetweenFrames[i] = 100f;
+            Rectangle area = new Rectangle(i * SpriteSheet.Width / FramesCount,
+                                           0,
+                                           SpriteSheet.Width / FramesCount,
+                                           SpriteSheet.Height);
+            ImageFrames[i] = SpriteSheet.Clone(area, SpriteSheet.PixelFormat);
+        }
+        timer = new Stopwatch();
+    }
+    public Animation(Bitmap[] Sprites)
+    {
+        nFramesCount = Sprites.Length;
+        fTimeBetweenFrames = new float[nFramesCount];
+        ImageFrames = new Bitmap[nFramesCount];
+        for (int i = 0; i < nFramesCount; i++)
+        {
+            fTimeBetweenFrames[i] = 100f;
+            ImageFrames[i] = Sprites[i];
+        }
+        timer = new Stopwatch();
+    }
+    public void RescaleFrames(float procent)
+    {
+        for (int i = 0; i < nFramesCount; i++)
+        {
+            int w = ImageFrames[i].Width;
+            int h = ImageFrames[i].Height;
+            ImageFrames[i] = new Bitmap(ImageFrames[i], (int)(w * procent), (int)(h * procent));
+        }
+    }
+    public void SetTimeBetweenFramesIntervals(float[] Intervals)
+    {
+        if (Intervals.Length == 1 && nFramesCount > 1)
+        {
+            for (int i = 0; i < nFramesCount; i++)
+                fTimeBetweenFrames[i] = Intervals[0];
+        }
+        else
+        {
+            for (int i = 0; i < Intervals.Length; i++)
+                fTimeBetweenFrames[i] = Intervals[i];
+        }
+    }
+    public void AnimationState(bool ChangeState)
+    {
+        if (ChangeState)
+        {
+            if (!bAnimating)
+            {
+                nCurrentFrame = 0;
+                bAnimating = true;
+                timer.Start();
+            }
+        }
+        else
+        {
+            if (bAnimating)
+            {
+                bAnimating = false;
+                timer.Reset();
+            }
+        }
+    }
+    public void Animate(Graphics g, float px, float py)
+    {
+        if (bAnimating)
+        {
+            if (timer.ElapsedMilliseconds >= fTimeBetweenFrames[nCurrentFrame])
+            {
+                timer.Restart();
+                nCurrentFrame++;
+                if (nCurrentFrame >= nFramesCount) nCurrentFrame = 0;
+            }
+            g.DrawImage(ImageFrames[nCurrentFrame], px - ImageFrames[nCurrentFrame].Width * 0.5f,
+                                                    py - ImageFrames[nCurrentFrame].Height * 0.5f);
+        }
     }
 }
 static class Input
