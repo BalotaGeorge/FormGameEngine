@@ -23,7 +23,7 @@ class FormGameEngine
     private int nScreenHeight;
     private float fpsTime;
     private int fps;
-    public void Construct(Form thisform, int ScreenWidth, int ScreenHeight)
+    public void Construct(Form thisform, int ScreenWidth, int ScreenHeight, bool fullscreen = false)
     {
         if (ScreenWidth < 100 || ScreenHeight < 10)
         {
@@ -32,14 +32,25 @@ class FormGameEngine
         }
 
         form = thisform;
-        form.StartPosition = FormStartPosition.CenterScreen;
         form.Text = "";
-        nScreenWidth = ScreenWidth;
-        nScreenHeight = ScreenHeight;
-        form.Width = nScreenWidth + 16;
-        form.Height = nScreenHeight + 39;
-        form.MaximumSize = new Size(form.Width, form.Height);
-        form.MinimumSize = new Size(form.Width, form.Height);
+        form.StartPosition = FormStartPosition.CenterScreen;
+        if (fullscreen)
+        {
+            form.FormBorderStyle = FormBorderStyle.None;
+            form.WindowState = FormWindowState.Maximized;
+            form.Bounds = Screen.PrimaryScreen.Bounds;
+            nScreenWidth = form.Width;
+            nScreenHeight = form.Height;
+        }
+        else
+        {
+            nScreenWidth = ScreenWidth;
+            nScreenHeight = ScreenHeight;
+            form.Width = nScreenWidth + 16;
+            form.Height = nScreenHeight + 39;
+            form.MaximumSize = new Size(form.Width, form.Height);
+            form.MinimumSize = new Size(form.Width, form.Height);
+        }
 
         Canvas = new PictureBox();
         Canvas.BackColor = Color.Black;
@@ -61,7 +72,7 @@ class FormGameEngine
     }
     private void Update(object sender, EventArgs e)
     {
-        Time.Reset();
+        Time.Calculate();
         fpsTime += Time.fElapsedTime;
         if (fpsTime >= 0.5f)
         {
@@ -86,6 +97,10 @@ class FormGameEngine
     public bool Focused()
     {
         return form.Focused;
+    }
+    public void Exit()
+    {
+        Application.Exit();
     }
     //public unsafe void UpdatePixels(byte[] pixels)
     //{
@@ -123,8 +138,8 @@ class FormGameEngine
 class Sound
 {
     [DllImport("winmm.dll")]
-    static extern Int32 mciSendString(string command, StringBuilder buffer, int bufferSize, IntPtr hwndCallback);
-    string SoundFile;
+    private static extern Int32 mciSendString(string command, StringBuilder buffer, int bufferSize, IntPtr hwndCallback);
+    private string SoundFile;
     public Sound(string filepath)
     {
         SoundFile = filepath;
@@ -249,25 +264,27 @@ static class Utility
 }
 static class Time
 {
-    static Stopwatch s;
-    static TimeSpan t;
-    static double t1;
-    static double t2;
+    private static Stopwatch s;
+    private static TimeSpan t;
+    private static double t1;
+    private static double t2;
     public static float fElapsedTime;
+    public static float fTotalTime;
     public static void Start()
     {
         t1 = 0;
         t2 = 0;
         s = new Stopwatch();
         s.Start();
-        Reset();
+        Calculate();
     }
-    public static void Reset()
+    public static void Calculate()
     {
         t = s.Elapsed;
         t1 = t.TotalSeconds;
         fElapsedTime = (float)(t1 - t2);
         t2 = t1;
+        fTotalTime += fElapsedTime;
     }
 }
 class Vector
@@ -289,9 +306,7 @@ class Vector
     }
     public static Vector RandomVector()
     {
-        Vector v = new Vector((float)FormGameEngine.rnd.NextDouble(), 
-                              (float)FormGameEngine.rnd.NextDouble());
-        return v;
+        return VectorFromAngle((float)(FormGameEngine.rnd.NextDouble() * Math.PI * 2f));
     }
     public Vector Clone()
     {
@@ -311,10 +326,13 @@ class Vector
     }
     public Vector Normalize()
     {
-        float d = (float)Math.Sqrt(x * x + y * y + z * z);
-        x /= d;
-        y /= d;
-        z /= d;
+        float d = Magnitude();
+        if (d != 0f)
+        {
+            x /= d;
+            y /= d;
+            z /= d;
+        }
         return Clone();
     }
     public Vector Limit(float value)
@@ -338,10 +356,7 @@ class Vector
     }
     public Vector Lerp(Vector v)
     {
-        x = (x + v.x) * 0.5f;
-        y = (y + v.y) * 0.5f;
-        z = (z + v.z) * 0.5f;
-        return new Vector(x, y, z);
+        return (this + v) * 0.5f;
     }
     public static Vector VectorFromAngle(float angle)
     {
@@ -433,8 +448,8 @@ class Vector
 class Matrix
 {
     public float[,] matrix;
-    public int cols;
     public int rows;
+    public int cols;
     public Matrix(int n, int m)
     {
         rows = n;
@@ -924,7 +939,6 @@ static class Input
     }
     private static void EvenMouseMove(object sender, MouseEventArgs e)
     {
-        pmouse = mouse.Clone();
         mouse.x = e.X;
         mouse.y = e.Y;
     }
@@ -1022,6 +1036,7 @@ static class Input
     {
         foreach (DictionaryEntry key in kb_now)
             kb_prev[key.Key] = (bool)kb_now[key.Key];
+        pmouse = mouse.Clone();
     }
     public static void UpdateState(Keys key, bool state)
     {

@@ -7,8 +7,8 @@ using System.Text;
 using System.Threading.Tasks;
 static class Noise
 {
-	private static float STRETCH_CONSTANT_2D = -0.211325f;
-	private static float SQUISH_CONSTANT_2D = 0.366025f;
+	private static float STRETCH_CONSTANT_2D = -0.2113248f;
+	private static float SQUISH_CONSTANT_2D = 0.3660254f;
 	private static float STRETCH_CONSTANT_3D = -1f / 6f;
 	private static float SQUISH_CONSTANT_3D = 1f / 3f;
 	private static float NORM_CONSTANT_2D = 47f;
