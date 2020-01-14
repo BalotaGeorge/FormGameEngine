@@ -36,7 +36,7 @@ namespace Engine
             public override void OnUserCreate()
             {
                 spriteship = new Bitmap("../../spaceship.png");
-                pos = new Vector(ScreenWidth() * 0.5f, ScreenHeight() * 0.5f);
+                pos = Middle();
                 vel = new Vector();
                 maxspeed = 200f;
                 maxsteer = 0.01f;

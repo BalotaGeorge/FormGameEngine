@@ -94,6 +94,10 @@ class FormGameEngine
     {
         return nScreenHeight;
     }
+    public Vector Middle()
+    {
+        return new Vector(ScreenWidth() * 0.5f, ScreenHeight() * 0.5f);
+    }
     public bool Focused()
     {
         return form.Focused;
@@ -304,6 +308,12 @@ class Vector
         y = p.Y;
         z = 0f;
     }
+    public Vector(SizeF s)
+    {
+        x = s.Width;
+        y = s.Height;
+        z = 0f;
+    }
     public static Vector RandomVector()
     {
         return VectorFromAngle((float)(FormGameEngine.rnd.NextDouble() * Math.PI * 2f));
@@ -346,10 +356,11 @@ class Vector
         }
         return Clone();
     }
-    public Vector Rotate(float angle)
+    public Vector Rotate(float angle, Vector pivot = null)
     {
-        float x_ = (float)(Math.Cos(angle) * x - Math.Sin(angle) * y);
-        float y_ = (float)(Math.Sin(angle) * x + Math.Sin(angle) * y);
+        if (pivot == null) pivot = new Vector();
+        float x_ = (float)(Math.Cos(angle) * (x - pivot.x) - Math.Sin(angle) * (y - pivot.y)) + pivot.x;
+        float y_ = (float)(Math.Cos(angle) * (y - pivot.y) + Math.Sin(angle) * (x - pivot.x)) + pivot.y;
         x = x_;
         y = y_;
         return Clone();
@@ -366,7 +377,7 @@ class Vector
     {
         return (float)Math.Atan2(y, x);
     }
-    public bool OutsideBounds(float x1, float y1, float x2, float y2)
+    public bool InsideBounds(float x1, float y1, float x2, float y2)
     {
         if (x1 > x2)
         {
@@ -380,8 +391,8 @@ class Vector
             y1 = y2;
             y2 = t;
         }
-        if (x >= x1 && y >= y1 && x <= x2 && y <= y2) return false;
-        return true;
+        if (x >= x1 && y >= y1 && x <= x2 && y <= y2) return true;
+        return false;
     }
     public void KeepInBounds(float x1, float y1, float x2, float y2, bool warp = false)
     {
@@ -601,11 +612,20 @@ class Matrix
         else
             throw new Exception("Can not mulitiply those");
     }
-    public Vector Multiply(Vector v)
+    public Vector Multiply(Vector v, bool vectorfirst = false)
     {
-        Matrix m = new Matrix(new float[,] { { v.x }, { v.y }, { v.z } });
-        Matrix mm = Multiply(m);
-        return new Vector(mm.matrix[0, 0], mm.matrix[1, 0], mm.matrix[2, 0]);
+        if (vectorfirst)
+        {
+            Matrix m = new Matrix(new float[,] { { v.x, v.y, v.z } });
+            Matrix mm = m.Multiply(this);
+            return new Vector(mm.matrix[0, 0], mm.matrix[0, 1], mm.matrix[0, 2]);
+        }
+        else
+        {
+            Matrix m = new Matrix(new float[,] { { v.x }, { v.y }, { v.z } });
+            Matrix mm = Multiply(m);
+            return new Vector(mm.matrix[0, 0], mm.matrix[1, 0], mm.matrix[2, 0]);
+        }
     }
     public float Determinant()
     {
@@ -722,6 +742,88 @@ class Matrix
             throw new Exception("The matrices do not have similar sizes");
     }
 }
+class Line
+{
+    public Vector sp;
+    public Vector ep;
+    public Line(float spx, float spy, float epx, float epy)
+    {
+        sp = new Vector(spx, spy);
+        ep = new Vector(epx, epy);
+    }
+    public Line(Vector sp, Vector ep)
+    {
+        this.sp = sp.Clone();
+        this.ep = ep.Clone();
+    }
+    public Line Clone()
+    {
+        return new Line(sp, ep);
+    }
+    public float DistPointToLine(Vector v)
+    {
+        float l2 = (sp - ep).Magnitude() * (sp - ep).Magnitude(); 
+        if (l2 == 0f) return (v - sp).Magnitude();   
+        float t = Math.Max(0f, Math.Min(1f, (v - sp).Dot(ep - sp) / l2));
+        Vector projection = sp + t * (ep - sp);  
+        return (v - projection).Magnitude();
+    }
+    public Vector ProjPointOnLine(Vector v)
+    {
+        float m = (sp.y - ep.y) / (sp.x - ep.x);
+        float n = sp.y - m * sp.x;
+        float x = (v.x + m * v.y - m * n) / (m * m + 1);
+        float y = m * x + n;
+        Vector rez = new Vector(x, y);
+        if (DistPointToLine(rez) > 0.1f) 
+        {
+            if ((sp - rez).Magnitude() < (ep - rez).Magnitude()) rez = sp.Clone();
+            else rez = ep.Clone();
+        }
+        return rez;
+    }
+    public Vector IntersectionPoint(Line l, bool direct = true)
+    {
+        float x1 = sp.x;
+        float y1 = sp.y;
+        float x2 = ep.x;
+        float y2 = ep.y;
+        float x3 = l.sp.x;
+        float y3 = l.sp.y;
+        float x4 = l.ep.x;
+        float y4 = l.ep.y;
+        float t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4));
+        float u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4));
+        if (t >= 0f && u >= 0f && u <= 1f)
+        {
+            if (direct)
+            {
+                if (t <= 1f)
+                    return new Vector(x1 + t * (x2 - x1), y1 + t * (y2 - y1));
+            }
+            else return new Vector(x1 + t * (x2 - x1), y1 + t * (y2 - y1));
+        }
+        return null;
+    }
+    public float AngleLine(Line l)
+    {
+        float m1 = (sp.y - ep.y) / (sp.x - ep.x);
+        float m2 = (l.sp.y - l.ep.y) / (l.sp.x - l.ep.x);
+        return (float)Math.Atan((m1 - m2) / (1f + m1 * m2));
+    }
+    public float Length()
+    {
+        return (ep - sp).Magnitude();
+    }
+    public Vector Heading()
+    {
+        return (ep - sp).Normalize();
+    }
+    public override string ToString()
+    {
+        return $"SP({sp.x}, {sp.y}, {sp.z}), EP({ep.x}, {ep.y}, {ep.z})";
+    }
+}
 static class FileRead
 {
     private static List<char> ListDividers = new List<char>() { ' ', ',', '!', '?' };
@@ -775,7 +877,6 @@ static class FileRead
         if (float.TryParse(word, out float valuefloat))
             return valuefloat;
         if (word.Length == 1) return word[0];
-        if (word.Length == 0) throw new Exception("Reached the end of file");
         return word;
     }
     public static bool EndOfFile()
@@ -1032,18 +1133,31 @@ static class Input
     {
         return pmouse;
     }
+    public static Vector PlaneMovement()
+    {
+        Vector v = new Vector();
+        if (KeyHeld(Keys.W) || KeyHeld(Keys.Up)) v.y += -1;
+        if (KeyHeld(Keys.D) || KeyHeld(Keys.Right)) v.x += 1;
+        if (KeyHeld(Keys.S) || KeyHeld(Keys.Down)) v.y += 1;
+        if (KeyHeld(Keys.A) || KeyHeld(Keys.Left)) v.x += -1;
+        return v;
+    }
+    public static Keys AsKey(string keyname)
+    {
+        return (Keys)Enum.Parse(typeof(Keys), keyname, true);
+    }
     public static void UpdateKeys()
     {
         foreach (DictionaryEntry key in kb_now)
             kb_prev[key.Key] = (bool)kb_now[key.Key];
         pmouse = mouse.Clone();
     }
-    public static void UpdateState(Keys key, bool state)
+    private static void UpdateState(Keys key, bool state)
     {
         kb_now[key] = state;
         if (kb_prev[key] == null) kb_prev[key] = false;
     }
-    public static void UpdateState(MouseButtons key, bool state)
+    private static void UpdateState(MouseButtons key, bool state)
     {
         kb_now[key] = state;
         if (kb_prev[key] == null) kb_prev[key] = false;
