@@ -24,6 +24,7 @@ namespace Engine
         }
         class Demo : FormGameEngine
         {
+            Sound enginesound;
             Bitmap spriteship;
             Vector pos;
             Vector vel;
@@ -35,6 +36,7 @@ namespace Engine
             }
             public override void OnUserCreate()
             {
+                enginesound = new Sound("../../enginesound.wav");
                 spriteship = new Bitmap("../../spaceship.png");
                 pos = Middle();
                 vel = new Vector();
@@ -44,16 +46,20 @@ namespace Engine
             public override void OnUserUpdate(float fElapsedTime)
             {
                 gCanvas.Clear(Color.Black);
+                if (Input.KeyPressed(MouseButtons.Left)) maxspeed *= 3f;
+                if (Input.KeyReleased(MouseButtons.Left)) maxspeed /= 3f;
                 Vector desire = (Input.MousePos() - pos).Normalize();
                 Vector steering = desire - vel;
                 vel += steering.Limit(maxsteer);
                 float distance = (Input.MousePos() - pos).Magnitude();
-                float speed = Utility.Map(distance, 1, 100, 0, maxspeed);
+                float speed = Utility.Map(distance, 1f, 100f, 0f, maxspeed);
                 pos += vel * speed * fElapsedTime;
                 float angle = vel.AngleFromVector();
                 Bitmap pspriteship = Utility.RotateImage(spriteship, Utility.Degrees(angle));
                 gCanvas.DrawImage(pspriteship, pos.x - pspriteship.Width * 0.5f, pos.y - pspriteship.Height * 0.5f);
                 pspriteship.Dispose();
+                if (speed > 10f && Focused()) enginesound.PlayLoop();
+                else enginesound.Stop();
             }
         }
     }

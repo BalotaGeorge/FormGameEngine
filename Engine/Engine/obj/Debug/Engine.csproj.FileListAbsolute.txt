@@ -6,3 +6,9 @@ C:\AnyThingElse\PB VS C#\Engine\Engine\obj\Debug\Engine.Properties.Resources.res
 C:\AnyThingElse\PB VS C#\Engine\Engine\obj\Debug\Engine.csproj.GenerateResource.cache
 C:\AnyThingElse\PB VS C#\Engine\Engine\obj\Debug\Engine.exe
 C:\AnyThingElse\PB VS C#\Engine\Engine\obj\Debug\Engine.pdb
+C:\AnyThingElse\PB VS C#\Engine\Engine\bin\Debug\Interop.WMPLib.dll
+C:\AnyThingElse\PB VS C#\Engine\Engine\bin\Debug\AxInterop.WMPLib.dll
+C:\AnyThingElse\PB VS C#\Engine\Engine\obj\Debug\Interop.WMPLib.dll
+C:\AnyThingElse\PB VS C#\Engine\Engine\obj\Debug\AxInterop.WMPLib.dll
+C:\AnyThingElse\PB VS C#\Engine\Engine\obj\Debug\Engine.csproj.ResolveComReference.cache
+C:\AnyThingElse\PB VS C#\Engine\Engine\obj\Debug\Engine.Demolition.resources

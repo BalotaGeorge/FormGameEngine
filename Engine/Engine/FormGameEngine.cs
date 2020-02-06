@@ -6,7 +6,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
-using System.Runtime.InteropServices;
+using System.Media;
 using System.Text;
 using System.Windows.Forms;
 class FormGameEngine
@@ -19,16 +19,17 @@ class FormGameEngine
     private Timer timer;
     private PictureBox Canvas;
     private Form form;
+    private int nFrameCounter;
     private int nScreenWidth;
     private int nScreenHeight;
     private float fpsTime;
     private int fps;
-    public void Construct(Form thisform, int ScreenWidth, int ScreenHeight, bool fullscreen = false)
+    public void Construct(Form thisform, int screenWidth, int screenHeight, bool fullscreen = false)
     {
-        if (ScreenWidth < 100 || ScreenHeight < 10)
+        if (screenWidth < 100 || screenHeight < 10)
         {
-            ScreenWidth = 640;
-            ScreenHeight = 480;
+            screenWidth = 640;
+            screenHeight = 480;
         }
 
         form = thisform;
@@ -44,8 +45,8 @@ class FormGameEngine
         }
         else
         {
-            nScreenWidth = ScreenWidth;
-            nScreenHeight = ScreenHeight;
+            nScreenWidth = screenWidth;
+            nScreenHeight = screenHeight;
             form.Width = nScreenWidth + 16;
             form.Height = nScreenHeight + 39;
             form.MaximumSize = new Size(form.Width, form.Height);
@@ -73,6 +74,7 @@ class FormGameEngine
     private void Update(object sender, EventArgs e)
     {
         Time.Calculate();
+        nFrameCounter++;
         fpsTime += Time.fElapsedTime;
         if (fpsTime >= 0.5f)
         {
@@ -94,9 +96,13 @@ class FormGameEngine
     {
         return nScreenHeight;
     }
+    public int FrameCount()
+    {
+        return nFrameCounter;
+    }
     public Vector Middle()
     {
-        return new Vector(ScreenWidth() * 0.5f, ScreenHeight() * 0.5f);
+        return new Vector(nScreenWidth * 0.5f, nScreenHeight * 0.5f);
     }
     public bool Focused()
     {
@@ -123,7 +129,7 @@ class FormGameEngine
     //    }
     //    bCanvas.UnlockBits(bd);
     //}
-    public void SaveFrame(string locationpath, string name, string format)
+    public void SaveFrame(string locationpath, string name, string format = "bmp")
     {
         ImageFormat imf;
         format.ToLower();
@@ -141,54 +147,86 @@ class FormGameEngine
 }
 class Sound
 {
-    [DllImport("winmm.dll")]
-    private static extern Int32 mciSendString(string command, StringBuilder buffer, int bufferSize, IntPtr hwndCallback);
-    private string SoundFile;
+    private SoundPlayer sp;
+    private bool bPlaying;
     public Sound(string filepath)
     {
-        SoundFile = filepath;
+        sp = new SoundPlayer(filepath);
+        bPlaying = false;
+    }
+    ~Sound()
+    {
+        sp.Dispose();
+    }
+    public void PlayOnce()
+    {
+        if (!bPlaying)
+        {
+            sp.Play();
+            bPlaying = true;
+        }
     }
     public void Play()
     {
-        mciSendString("stop " + SoundFile, new StringBuilder(), 0, IntPtr.Zero);
-        mciSendString("play " + SoundFile, new StringBuilder(), 0, IntPtr.Zero);
+        sp.Play();
     }
     public void Stop()
     {
-        mciSendString("stop " + SoundFile, new StringBuilder(), 0, IntPtr.Zero);
+        if (bPlaying)
+        {
+            sp.Stop();
+            bPlaying = false;
+        }
+    }
+    public void PlayLoop()
+    {
+        if (!bPlaying) 
+        {
+            sp.PlayLooping();
+            bPlaying = true;
+        }
     }
 }
 static class Utility
 {
-    public static float[] SimpleNoise1D(float[] Seed, int Octaves = 8, float Bias = 2f, bool Wrap = false)
+    public static uint SeededRandom(uint seed)
     {
-        int nCount = Seed.Length;
+        seed += 0xe120fc15;
+        ulong tmp = (ulong)seed * 0x4a39b70d;
+        uint m1 = (uint)((tmp >> 32) ^ tmp);
+        tmp = (ulong)m1 * 0x12fad5c9;
+        uint m2 = (uint)((tmp >> 32) ^ tmp);
+        return m2;
+    }
+    public static float[] SimpleNoise1D(float[] seed, int octaves = 8, float bias = 2f, bool wrap = false)
+    {
+        int nCount = seed.Length;
         float[] fOutput = new float[nCount];
         for (int x = 0; x < nCount; x++)
         {
             float fNoise = 0f;
             float fScaleAcc = 0f;
             float fScale = 1f;
-            for (int o = 0; o < Octaves; o++)
+            for (int o = 0; o < octaves; o++)
             {
                 int nPitch = nCount >> o;
                 int nSample1 = (x / nPitch) * nPitch;
                 int ns = nSample1 + nPitch;
-                int nSample2 = (ns < nCount) ? nSample1 + nPitch : (Wrap ? ns % nCount : nCount - 1);
+                int nSample2 = (ns < nCount) ? nSample1 + nPitch : (wrap ? ns % nCount : nCount - 1);
                 float fBlend = (x - nSample1) / (float)nPitch;
-                float fSample = (1.0f - fBlend) * Seed[nSample1] + fBlend * Seed[nSample2];
+                float fSample = (1.0f - fBlend) * seed[nSample1] + fBlend * seed[nSample2];
                 fScaleAcc += fScale;
                 fNoise += fSample * fScale;
-                fScale /= Bias;
+                fScale /= bias;
             }
             fOutput[x] = fNoise / fScaleAcc;
         }
         return fOutput;
     }
-    public static float[,] SimpleNoise2D(float[,] Seed, int Octaves = 8, float Bias = 2f, bool Wrap = false)
+    public static float[,] SimpleNoise2D(float[,] seed, int octaves = 8, float bias = 2f, bool wrap = false)
     {
-        int nWidth = Seed.GetLength(0);
-        int nHeight = Seed.GetLength(1);
+        int nWidth = seed.GetLength(0);
+        int nHeight = seed.GetLength(1);
         float[,] fOutput = new float[nWidth, nHeight];
         for (int x = 0; x < nWidth; x++)
             for (int y = 0; y < nHeight; y++)
@@ -196,7 +234,7 @@ static class Utility
                 float fNoise = 0.0f;
                 float fScaleAcc = 0.0f;
                 float fScale = 1.0f;
-                for (int o = 0; o < Octaves; o++)
+                for (int o = 0; o < octaves; o++)
                 {
                     int nPitchX = nWidth >> o;
                     int nPitchY = nHeight >> o;
@@ -204,33 +242,33 @@ static class Utility
                     int nSampleY1 = (y / nPitchY) * nPitchY;
                     int nsx = nSampleX1 + nPitchX;
                     int nsy = nSampleY1 + nPitchY;
-                    int nSampleX2 = (nsx < nWidth) ? nsx : (Wrap ? nsx % nWidth : nWidth - 1);
-                    int nSampleY2 = (nsy < nHeight) ? nsy : (Wrap ? nsy % nHeight : nHeight - 1);
+                    int nSampleX2 = (nsx < nWidth) ? nsx : (wrap ? nsx % nWidth : nWidth - 1);
+                    int nSampleY2 = (nsy < nHeight) ? nsy : (wrap ? nsy % nHeight : nHeight - 1);
                     float fBlendX = (x - nSampleX1) / (float)nPitchX;
                     float fBlendY = (y - nSampleY1) / (float)nPitchY;
-                    float fSampleT = (1.0f - fBlendX) * Seed[nSampleX1, nSampleY1] + fBlendX * Seed[nSampleX2, nSampleY1];
-                    float fSampleB = (1.0f - fBlendX) * Seed[nSampleX1, nSampleY2] + fBlendX * Seed[nSampleX2, nSampleY2];
+                    float fSampleT = (1.0f - fBlendX) * seed[nSampleX1, nSampleY1] + fBlendX * seed[nSampleX2, nSampleY1];
+                    float fSampleB = (1.0f - fBlendX) * seed[nSampleX1, nSampleY2] + fBlendX * seed[nSampleX2, nSampleY2];
                     fScaleAcc += fScale;
                     fNoise += (fBlendY * (fSampleB - fSampleT) + fSampleT) * fScale;
-                    fScale /= Bias;
+                    fScale /= bias;
                 }
                 fOutput[x, y] = fNoise / fScaleAcc;
             }
         return fOutput;
     }
-    public static float Map(float Value, float Valuelowlimit, float Valuehighlimit, float Maplowlimit, float Maphighlimit)
+    public static float Map(float value, float valueLowLimit, float valueHighLimit, float mapLowLimit, float mapHighLimit)
     {
-        if (Value >= Valuehighlimit) return Maphighlimit;
-        if (Value <= Valuelowlimit) return Maplowlimit;
-        float procent = (Value - Valuelowlimit) / (Valuehighlimit - Valuelowlimit);
-        float limitlen = Maphighlimit - Maplowlimit;
-        return Maplowlimit + procent * limitlen;
+        if (value >= valueHighLimit) return mapHighLimit;
+        if (value <= valueLowLimit) return mapLowLimit;
+        float procent = (value - valueLowLimit) / (valueHighLimit - valueLowLimit);
+        float limitlen = mapHighLimit - mapLowLimit;
+        return mapLowLimit + procent * limitlen;
     }
-    public static void Swap<T>(ref T x, ref T y)
+    public static void Swap<T>(ref T a, ref T b)
     {
-        T t = y;
-        y = x;
-        x = t;
+        T t = b;
+        b = a;
+        a = t;
     }
     public static float Degrees(float radians)
     {
@@ -265,10 +303,55 @@ static class Utility
         tempImg.Dispose();
         return newImg;
     }
+    public static Vector CollisionSAT(Vector[] pa, Vector[] pb)
+    {
+        float overlap = float.MaxValue;
+        Vector resolve = new Vector();
+        for (int s = 0; s < 2; s++)
+        {
+            if (s == 1) Swap(ref pa, ref pb);
+            for (int p = 0; p < pa.Length; p++)
+            {
+                Vector axp = new Vector(-(pa[(p + 1) % pa.Length].y - pa[p].y), pa[(p + 1) % pa.Length].x - pa[p].x).Normalize();
+                float min_r1 = float.MaxValue;
+                float max_r1 = float.MinValue;
+                for (int pt = 0; pt < pa.Length; pt++)
+                {
+                    float dot = pa[pt].Dot(axp);
+                    min_r1 = Math.Min(min_r1, dot);
+                    max_r1 = Math.Max(max_r1, dot);
+                }
+                float min_r2 = float.MaxValue;
+                float max_r2 = float.MinValue;
+                for (int pt = 0; pt < pb.Length; pt++)
+                {
+                    float dot = pb[pt].Dot(axp);
+                    min_r2 = Math.Min(min_r2, dot);
+                    max_r2 = Math.Max(max_r2, dot);
+                }
+                float co = Math.Min(max_r1, max_r2) - Math.Max(min_r1, min_r2);
+                if (co < overlap)
+                {
+                    if (co < 0f) return new Vector();
+                    overlap = co;
+                    resolve = axp;
+                }
+            }
+        }
+        Vector mida = new Vector();
+        for (int i = 0; i < pa.Length; i++) mida += pa[i];
+        mida /= pa.Length;
+        Vector midb = new Vector();
+        for (int i = 0; i < pb.Length; i++) midb += pb[i];
+        midb /= pb.Length;
+        Vector cd = (mida - midb).Normalize();
+        if (cd.Dot(resolve) < 0f) resolve *= -1f;
+        return resolve * -overlap;
+    }
 }
 static class Time
 {
-    private static Stopwatch s;
+    public static Stopwatch s;
     private static TimeSpan t;
     private static double t1;
     private static double t2;
@@ -316,7 +399,7 @@ class Vector
     }
     public static Vector RandomVector()
     {
-        return VectorFromAngle((float)(FormGameEngine.rnd.NextDouble() * Math.PI * 2f));
+        return VectorFromAngle((float)(FormGameEngine.rnd.NextDouble() * Math.PI) * 2f);
     }
     public Vector Clone()
     {
@@ -422,6 +505,12 @@ class Vector
             if (x > x2) x = x2;
             if (y > y2) y = y2;
         }
+    }
+    public static PointF[] AsPoints(Vector[] v)
+    {
+        PointF[] p = new PointF[v.Length];
+        for (int i = 0; i < p.Length; i++) p[i] = v[i].AsPoint();
+        return p;
     }
     public PointF AsPoint()
     {
@@ -762,7 +851,7 @@ class Line
     }
     public float DistPointToLine(Vector v)
     {
-        float l2 = (sp - ep).Magnitude() * (sp - ep).Magnitude(); 
+        float l2 = Length() * Length(); 
         if (l2 == 0f) return (v - sp).Magnitude();   
         float t = Math.Max(0f, Math.Min(1f, (v - sp).Dot(ep - sp) / l2));
         Vector projection = sp + t * (ep - sp);  
@@ -830,13 +919,13 @@ static class FileRead
     private static List<string> FileUnchanged = new List<string>();
     private static string FileChanged = "";
     private static int CurrentIndex = 0;
-    public static void ProcessFile(string FilePath)
+    public static void ProcessFile(string filepath)
     {
         FileUnchanged.Clear();
         FileChanged = "";
         CurrentIndex = 0;
         StringBuilder sb = new StringBuilder();
-        using (var reader = new StreamReader(FilePath))
+        using (var reader = new StreamReader(filepath))
         {
             string buffer;
             while ((buffer = reader.ReadLine()) != null)
@@ -848,10 +937,10 @@ static class FileRead
         }
         FileChanged = sb.ToString();
     }
-    private static bool IsDivider(char Value)
+    private static bool IsDivider(char value)
     {
         foreach (char c in ListDividers)
-            if (c == Value) return true;
+            if (c == value) return true;
         return false;
     }
     public static string GetNextAsText()
@@ -877,24 +966,25 @@ static class FileRead
         if (float.TryParse(word, out float valuefloat))
             return valuefloat;
         if (word.Length == 1) return word[0];
+        if (word.Length == 0) return null;
         return word;
     }
     public static bool EndOfFile()
     {
         int LastIndex = CurrentIndex;
         string word = GetNextAsText();
-        if (word == "") return true;
+        if (word == null) return true;
         else
         {
             CurrentIndex = LastIndex;
             return false;
         }
     }
-    public static void ReplaceDividers(char[] Dividers)
+    public static void ReplaceDividers(char[] dividers)
     {
         ListDividers.Clear();
-        for (int i = 0; i < Dividers.Length; i++)
-            ListDividers.Add(Dividers[i]);
+        for (int i = 0; i < dividers.Length; i++)
+            ListDividers.Add(dividers[i]);
     }
     public static string ViewFile(int line = -1)
     {
@@ -918,31 +1008,31 @@ class Animation
     private float[] fTimeBetweenFrames;
     private bool bAnimating;
     private Stopwatch timer;
-    public Animation(Bitmap SpriteSheet, int FramesCount)
+    public Animation(Bitmap spriteSheet, int framesCount)
     {
-        nFramesCount = FramesCount;
-        fTimeBetweenFrames = new float[FramesCount];
-        ImageFrames = new Bitmap[FramesCount];
-        for (int i = 0; i < FramesCount; i++)
+        nFramesCount = framesCount;
+        fTimeBetweenFrames = new float[framesCount];
+        ImageFrames = new Bitmap[framesCount];
+        for (int i = 0; i < framesCount; i++)
         {
             fTimeBetweenFrames[i] = 100f;
-            Rectangle area = new Rectangle(i * SpriteSheet.Width / FramesCount,
+            Rectangle area = new Rectangle(i * spriteSheet.Width / framesCount,
                                            0,
-                                           SpriteSheet.Width / FramesCount,
-                                           SpriteSheet.Height);
-            ImageFrames[i] = SpriteSheet.Clone(area, SpriteSheet.PixelFormat);
+                                           spriteSheet.Width / framesCount,
+                                           spriteSheet.Height);
+            ImageFrames[i] = spriteSheet.Clone(area, spriteSheet.PixelFormat);
         }
         timer = new Stopwatch();
     }
-    public Animation(Bitmap[] Sprites)
+    public Animation(Bitmap[] sprites)
     {
-        nFramesCount = Sprites.Length;
+        nFramesCount = sprites.Length;
         fTimeBetweenFrames = new float[nFramesCount];
         ImageFrames = new Bitmap[nFramesCount];
         for (int i = 0; i < nFramesCount; i++)
         {
             fTimeBetweenFrames[i] = 100f;
-            ImageFrames[i] = Sprites[i];
+            ImageFrames[i] = sprites[i];
         }
         timer = new Stopwatch();
     }
@@ -955,22 +1045,22 @@ class Animation
             ImageFrames[i] = new Bitmap(ImageFrames[i], (int)(w * procent), (int)(h * procent));
         }
     }
-    public void SetTimeBetweenFramesIntervals(float[] Intervals)
+    public void SetTimeBetweenFramesIntervals(float[] intervals)
     {
-        if (Intervals.Length == 1 && nFramesCount > 1)
+        if (intervals.Length == 1 && nFramesCount > 1)
         {
             for (int i = 0; i < nFramesCount; i++)
-                fTimeBetweenFrames[i] = Intervals[0];
+                fTimeBetweenFrames[i] = intervals[0];
         }
         else
         {
-            for (int i = 0; i < Intervals.Length; i++)
-                fTimeBetweenFrames[i] = Intervals[i];
+            for (int i = 0; i < intervals.Length; i++)
+                fTimeBetweenFrames[i] = intervals[i];
         }
     }
-    public void AnimationState(bool ChangeState)
+    public void AnimationState(bool changeState)
     {
-        if (ChangeState)
+        if (changeState)
         {
             if (!bAnimating)
             {
@@ -1011,6 +1101,7 @@ static class Input
     private static bool ScrollDown;
     private static Vector mouse;
     private static Vector pmouse;
+    private static bool FormCaptured;
     public static void LinkReferences(Form form, PictureBox canvas)
     {
         kb_prev = new Hashtable();
@@ -1020,10 +1111,16 @@ static class Input
         form.KeyPreview = true;
         form.KeyDown += EventKeyDown;
         form.KeyUp += EventKeyUp;
+        form.MouseCaptureChanged += EventMouseCapture;
         canvas.MouseDown += EventMouseDown;
         canvas.MouseUp += EventMouseUp;
         canvas.MouseMove += EvenMouseMove;
         canvas.MouseWheel += EventMouseWheel;
+    }
+    private static void EventMouseCapture(object sender, EventArgs e)
+    {
+        Time.s.Stop();
+        FormCaptured = true;
     }
     private static void EventMouseWheel(object sender, MouseEventArgs e)
     {
@@ -1127,11 +1224,11 @@ static class Input
     }
     public static Vector MousePos()
     {
-        return mouse;
+        return mouse.Clone();
     }
     public static Vector PMousePos()
     {
-        return pmouse;
+        return pmouse.Clone();
     }
     public static Vector PlaneMovement()
     {
@@ -1140,7 +1237,7 @@ static class Input
         if (KeyHeld(Keys.D) || KeyHeld(Keys.Right)) v.x += 1;
         if (KeyHeld(Keys.S) || KeyHeld(Keys.Down)) v.y += 1;
         if (KeyHeld(Keys.A) || KeyHeld(Keys.Left)) v.x += -1;
-        return v;
+        return v.Normalize();
     }
     public static Keys AsKey(string keyname)
     {
@@ -1151,6 +1248,11 @@ static class Input
         foreach (DictionaryEntry key in kb_now)
             kb_prev[key.Key] = (bool)kb_now[key.Key];
         pmouse = mouse.Clone();
+        if (FormCaptured)
+        {
+            Time.s.Start();
+            FormCaptured = false;
+        }
     }
     private static void UpdateState(Keys key, bool state)
     {
